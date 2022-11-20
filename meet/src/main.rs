@@ -3,6 +3,7 @@
 use std::fs;
 
 use std::path::Path;
+use std::collections::HashMap;
 
 use std::time::SystemTime;
 
@@ -37,7 +38,7 @@ struct LoginData {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct CreateForm {
+struct SubmitForm {
     name: String,
     submit: String,
 }
@@ -46,7 +47,7 @@ struct CreateForm {
 struct Selection {
     userid: Option<i64>,
     schid: i64,
-    mask: BitVec,
+    mask: Vec<u8>,
     name: Option<String>,
 }
 
@@ -60,7 +61,7 @@ impl Selection {
         Selection {
             userid,
             schid,
-            mask: BitVec::from_bytes(slice),
+            mask: slice.to_vec(),
             name,
         }
     }
@@ -155,7 +156,10 @@ fn get_schid(link: &[u8]) -> Result<i64, Rejection> {
         .unwrap();
     match select.query_row([link], |row| row.get::<usize, i64>(0)) {
         Ok(x) => Ok(x),
-        _ => Err(warp::reject()),
+        x => {
+            println!("{:?}", x);
+            Err(warp::reject())
+        }
     }
 }
 
@@ -173,7 +177,7 @@ fn insert_schid(link: &[u8]) -> Result<i64, Rejection> {
 fn get_userid(link: &[u8]) -> Result<i64, Rejection> {
     let db = Connection::open("data.db").expect("Failed to open database");
     let mut select = db
-        .prepare("SELECT (userid) FROM logins WHERE token = ?")
+        .prepare("SELECT userid FROM logins WHERE token = ?")
         .unwrap();
     match select.query_row([link], |row| row.get::<usize, i64>(0)) {
         Ok(x) => Ok(x),
@@ -192,7 +196,43 @@ fn new_userid(alias: &str, _pass: &str) -> Result<i64, Rejection> {
     }
 }
 
-fn new_selection(_selection: Selection) {}
+fn insert_selection(selection: Selection) -> Result<i64, Rejection> {
+    let db = Connection::open("data.db").expect("Failed to open database");
+    let mut insert = db
+        .prepare("INSERT OR REPLACE INTO selections (userid, schid, mask, name) VALUES (?, ?, ?, ?)")
+        .unwrap();
+    let s = selection;
+    match insert.insert(params![s.userid, s.schid, s.mask, s.name]) {
+        Ok(x) => Ok(x),
+        _ => Err(warp::reject()),
+    }
+}
+
+fn get_selections(schid: i64) -> Result<HashMap<String, String>, Rejection> {
+    let db = Connection::open("data.db").expect("Failed to open database");
+    let mut select = db
+        .prepare("SELECT name, mask FROM selections WHERE schid = ?")
+        .unwrap();
+    let mut map = HashMap::<String, String>::new();
+    let rows = select.query_map([schid], |row| Ok((row.get::<usize, String>(0)?, row.get::<usize, Vec<u8>>(1)?)));
+    let rows = match rows {
+        Ok(x) => x,
+        Err(x) => {
+            println!("{:?}", x);
+            return Err(warp::reject());
+        }
+    };
+    for selection in rows {
+        match selection {
+            Ok(x) => map.insert(x.0, encode(x.1)),
+            Err(x) => {
+                println!("{:?}", x);
+                return Err(warp::reject());
+            }
+        };        
+    }
+    Ok(map)
+}
 
 fn empty_ok() -> Result<&'static str, Rejection> {
     Ok("")
@@ -219,7 +259,7 @@ async fn main() {
         userid INTEGER UNIQUE,
         schid INTEGER NOT NULL,
         mask BLOB NOT NULL,
-        name TEXT,
+        name TEXT NOT NULL,
         FOREIGN KEY(schid) REFERENCES schedules(schid)
     )",
         (),
@@ -238,43 +278,50 @@ async fn main() {
     //     FOREIGN KEY(userid) REFERENCES users(userid)
     // )", ()).expect("Failed to create 'logins' table");
 
-    let mut insert = db
-        .prepare("INSERT OR REPLACE INTO selections (userid, schid, mask) VALUES (?, ?, ?)")
-        .unwrap();
-    insert
-        .execute(params![0, 2, &[0u8; 0]])
-        .expect("Failed insertion");
+    // let mut insert = db
+    //     .prepare("INSERT OR REPLACE INTO selections (userid, schid, mask, name) VALUES (?, ?, ?)")
+    //     .unwrap();
+    // insert
+    //     .execute(params![0, 2, &[0u8; 0]])
+    //     .expect("Failed insertion");
 
-    let mut retrieve = db
-        .prepare("SELECT userid, schid, mask, name FROM selections")
-        .unwrap();
-    let selection_iter = retrieve
-        .query_map([], |row| {
-            let blob: Vec<u8> = row.get(2)?;
-            Ok(Selection::from_bytes(
-                row.get(0)?,
-                row.get(1)?,
-                &blob,
-                row.get(2)?,
-            ))
-        })
-        .unwrap();
-    for selection in selection_iter {
-        println!("{:?}", selection);
-    }
+    // let mut retrieve = db
+    //     .prepare("SELECT userid, schid, mask, name FROM selections")
+    //     .unwrap();
+    // let selection_iter = retrieve
+    //     .query_map([], |row| {
+    //         let blob: Vec<u8> = row.get(2)?;
+    //         Ok(Selection::from_bytes(
+    //             row.get(0)?,
+    //             row.get(1)?,
+    //             &blob,
+    //             row.get(3)?,
+    //         ))
+    //     })
+    //     .unwrap();
+    // for selection in selection_iter {
+    //     println!("{:?}", selection);
+    // }
 
     let landing = warp::path::end().and_then(|| async { get_data(root, "new_meet.html") });
     let select_js = warp::path("select.js").and_then(|| async { get_data(root, "select.js") });
     let find = warp::path!(String).and_then(move |link: String| async move {
         let buf = decode(&link)?;
-        let _schid = get_schid(&buf)?;
+        let schid = get_schid(&buf)?;
         let reply = get_data(root, "select.html")?;
-        // let login = new_login(insert_login)?;
-        // let token = encode(login.token);
-        // Ok(warp::reply::with_header(reply, "set-cookie", format!("token={}", token))) as Result<_, Rejection>
         Ok(reply) as Result<_, Rejection>
     });
-    let files = warp::get().and(landing.or(select_js).or(find));
+    let query_selections = warp::path!(String / "q")
+        .and_then(|link: String| async move {
+            println!("query {}", link);
+            let link = decode(&link)?;
+            let schid = get_schid(&link)?;
+            println!("schid {}", schid);
+            let selections = get_selections(schid)?;
+            let reply = warp::reply::json(&selections);
+            Ok(reply) as Result<_, Rejection>
+        });
+    let files = warp::get().and(landing.or(select_js).or(find).or(query_selections));
 
     let create = warp::path("new").and_then(|| async {
         let sched = new_schedule(insert_schid)?;
@@ -283,22 +330,18 @@ async fn main() {
         Ok(redirect(&link, message)) as Result<_, Rejection>
     });
     let submit = warp::path!(String / "submit")
-        // .and(warp::cookie("token")) // , token: String
         .and(warp::body::content_length_limit(1024 * 32))
-        // .and(warp::header::headers_cloned())
         .and(warp::body::form())
-        .and_then(|link: String, form: CreateForm| async move {
+        .and_then(|link: String, form: SubmitForm| async move {
             println!("submit {}", link);
             let buf = decode(&link)?;
-            println!("Asubmit {}", link);
             let schid = get_schid(&buf)?;
-            // println!("Bsubmit {} {:?}", link, String::from_utf8_lossy(&decode(&form.name)?));
-            // let name = decode_str(&form.name)?;
-            let name = form.name;
-            println!("Csubmit {}", link);
+            let name = form.name.trim();
+            println!("submit {}", form.submit);
             let buf = decode(&form.submit)?;
-            let selection = Selection::from_bytes(None, schid, &buf, Some(name));
-            println!("select {:?}", selection);
+            println!("selected {:?}", buf);
+            let selection = Selection::from_bytes(None, schid, &buf, Some(name.to_string()));
+            insert_selection(selection);
             let link: String = format!("/{}", link);
             let message = format!("You should be redirected to {}", link);
             Ok(redirect(&link, message)) as Result<_, Rejection>
@@ -306,7 +349,7 @@ async fn main() {
     let catchall = warp::any().and(warp::path::full()).map(|path: FullPath| {
         println!("Failed: {}", path.as_str());
         warp::reply::with_status(
-            warp::reply::html("404 Not Found".to_string()),
+            warp::reply::html("We've encountered an error, sorry :(".to_string()),
             warp::http::StatusCode::NOT_FOUND,
         )
     });

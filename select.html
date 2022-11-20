@@ -3,12 +3,10 @@
 <head>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <!-- <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script> -->
 
     <!-- <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script> -->
-
-    <script src="/select.js" type="text/babel"></script>
 
     <style>
         .noselect {
@@ -20,23 +18,29 @@
                     user-select: none; /* Non-prefixed version, currently
                                         supported by Chrome, Edge, Opera and Firefox */
         }
+        .shield {
+            width: 100%;
+            height: 100%;
+            display: flex;
+        }
+        .shield > div {
+            height: 100%;
+            flex: 1;
+        }
+        .shield > div > div {
+            height: 100%;
+            flex: 1;
+        }
         .selection {
             position: absolute;
             width: 100%;
-            display: flex;
             /* transition: height 0.08s cubic-bezier(0.68, -0.55, 0.265, 1.55); */
         }
-        .selection > div {
-            flex: 1;
-            height: 100%;
-            padding-left: 0.2em;
-            padding-right: 0.2em;
+        .pink {
+            background-color: rgba(252, 46, 183, 0.678);
         }
-        .selection > div > div {
-            background-color: rgba(218, 45, 175, 0.5);
+        .round {
             border-radius: 0.15em;
-            width: 100%;
-            height: 100%;
         }
         .day {
             /* padding: 1em; */
@@ -45,14 +49,43 @@
             position: relative;
             background-color: rgba(129, 218, 45, 0.5);
         }
+        .schedule-card {
+            background-color: rgba(169, 236, 232, 0.5);
+            border-radius: 0.4em;
+            margin: 2em;
+            padding: 2em;
+        }
         .schedule {
-            max-width: 50em;
+            width: 100%;
             height: 40em;
             display: flex;
             background-color: rgba(71, 45, 218, 0.5);
+        }
+        .schedule-block {
+            flex: 1;
+            max-width: 50em;
+            min-width: 20em;
+        }
+        .hz {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .spacer {
+            max-width: 5em;
+            max-height: 5em;
+            flex: 1;
+        }
+        .active {
+            font-weight: bold;
+        }
+        .inactive {
+            opacity: 0.7;
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
+
+    <script src="/select.js" type="text/javascript"></script>
 </body>
