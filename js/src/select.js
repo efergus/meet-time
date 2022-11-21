@@ -27,6 +27,22 @@ function intersperse_fn(arr, sep_fn) {
     }, [arr[0]]);
 }
 
+function find_spans(arr, predicate) {
+    let ans = [];
+    const lim = arr.length;
+    for(let at = 0; at < lim; at++) {
+        while(at < lim && !predicate(arr[at])) at++;
+        const start = at;
+        while(at < lim && predicate(arr[at])) at++;
+        if(at > start) ans.push(new Span(start, at));
+    }
+    return ans;
+}
+
+function rgba(r, g, b, a) {
+    return "rgba(" + [r, g, b, a].join() + ")";
+}
+
 function relativeCoords ( event ) {
     var bounds = event.target.getBoundingClientRect();
     var x = event.clientX - bounds.left;
@@ -65,8 +81,16 @@ class SelectionCol {
         return this.bits.length;
     }
 
+    iterBits() {
+        return this.bits.iterBits();
+    }
+
     is_selected(idx) {
         return this.bits.get(idx);
+    }
+
+    any_selected() {
+        return this.bits.any();
     }
 
     set_selection(span, val=true) {
@@ -116,6 +140,15 @@ class SelectionMatrix {
         }
     }
 
+    any_selected() {
+        for(let col of this.columns) {
+            if(col.any_selected()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     map(f) {
         return this.columns.map(f);
     }
@@ -144,6 +177,16 @@ function Box({className, margins, children}) {
     return <div className="shield"><div style={style} className="pink round">{children}</div></div>
 }
 
+function ShowDates({dates}) {
+    const arr = dates.map((x, i)=><div key={i} className="flex">{"11/"+(i+1)}</div>);
+    return <div className="hz flex">{arr}</div>
+}
+
+function ShowTimes({rows}) {
+    const times = new Array(rows>>2).fill(null).map((x,i)=><div key={i} className="flex">{(i+8%12)+":00"}</div>);
+    return <div className="vt">{times}</div>
+}
+
 function Touchable({callback, className, style, children}) {
     const c = (e)=>{callback(e.buttons)};
     return <div className={className||""} style={style} onMouseMove={c} onMouseDown={c} onMouseUp={c}>{children}</div>
@@ -169,52 +212,71 @@ function ShowSelectionCol({selectionCol, callback}) {
     const spans = selectionCol.spans();
     const selections = spans.map((x, i)=><ShowSelection key={i} top={x.start/rows*height} bottom={height-x.end/rows*height}/>);
     const touchpad = <TouchpadCol rows={rows} callback={callback}/>;
-    return <div ref={ref} className="day">{selections}{touchpad}</div>
+    const spread = 4;
+    const lines = new Array(Math.floor(rows/spread)-1).fill(null).map((x, i)=><div key={i} className="hline absolute" style={{top:height/rows*spread*(i+1)}}/>);
+    const linesElem = <div className="shadow">{lines}</div>;
+    return <div ref={ref} className="day">{selections}{linesElem}{touchpad}</div>
 }
 
 function ShowSchedule({selectionMatrix, dimensions, cellCallback}) {
     const selectionCols = selectionMatrix.map((x, i)=><ShowSelectionCol key={i*2} selectionCol={x} callback={(row, buttons)=>cellCallback(new Point(i, row), buttons)}/>);
     const arr = intersperse_fn(selectionCols, (i)=><div key={i*2+1} className="vline"/>);
+    const dates = new Array(dimensions.x).fill(null).map((x,i)=>x);
     return (
-        <div className="hz schedule noselect">{arr}</div>
+        <div className="schedule"><div/><div><ShowDates dates={dates}/></div><ShowTimes rows={dimensions.y}/><div className="hz">{arr}</div></div>
     )
 }
 
-function ShowViewCol({selectionAmounts}) {
-    
+function ShowViewSelection({top, bottom, amt, all, max, callback}) {
+    const maxall = amt === all ? " viewall" : amt === max ? " viewmax" : "";
+    const color = maxall ? undefined : rgba(0, amt/max*255, 0, amt/max*255);
+    const style = {
+        top, bottom,
+        backgroundColor: color,
+    };
+    return <div className={"selection round"+maxall} style={style} onMouseEnter={callback}>{amt == all ? "Everyone!" : ""}</div>
 }
 
-function ShowView({selectionMatrix, dimensions}) {
+function ShowViewCol({selections, all, max}) {
+    const rows = selections.length;
+    const amts = selections.map(x=>x.length).sort().reduce((acc, x)=>acc[acc.length-1] === x ? acc : acc.concat([x]), [0]);
+    let selectionViews = [];
+    for(let amt of amts) {
+        if(!amt)continue;
+        const spans = find_spans(selections, x=>x.length>=amt);
+        for(let span of spans) {
+            const p = "%"
+            const top = span.start/rows*100;
+            const bottom = 100-span.end/rows*100;
+            selectionViews.push(<ShowViewSelection key={selectionViews.length} top={top+p} bottom={bottom+p} amt={amt} all={all} max={max}/>)
+        }
+    }
+    return <div className="day">{selectionViews}</div>
+}
 
-    // React.useEffect(() => {
-    //     get_selections().then((x) => {
-    //         setOtherSelections(x);
-    //     })
-    // }, []);
+function ShowView({selectionMatrix, all}) {
+    if(!selectionMatrix) return null;
+    const max = selectionMatrix.reduce((acc, x)=>Math.max(acc, x.reduce((acc, x)=>Math.max(acc, x.length), 0)), 0)
+    const arr = selectionMatrix.map((x, i) => <ShowViewCol key={i} selections={x} all={all} max={max}/>);
+    const dates = new Array(selectionMatrix.length).fill(null).map((x,i)=>x);
 
-    // const selection_graph = get_selection_graph(otherSelections);
-    // let selection_matrix = get_selection_matrix(selection_graph, dimensions);
-
-    return <div className="schedule"></div>
+    return <div className="schedule"><div/><ShowDates dates={dates}/><ShowTimes rows={selectionMatrix[0].length}/><div className="hz">{arr}</div></div>
 }
 
 async function get_selections() {
     let response = await fetch(window.location.pathname+"/q");
     let data = await response.json();
     for (let key in data) {
-        data[key][1] = decode_buffer(data[key][1]);
+        data[key][1] = new BitVec(decode_buffer(data[key][1]));
     }
     return data;
 }
 
-function get_selection_graph(selections, names=null) {
-    if(!names){
-        names = Object.keys(selections).sort();
-    }
+function get_selection_graph(selections) {
     let ans = {};
     for(let [name, sel] of selections) {
-        for(let i = 0; i < sel.length*8; i++) {
-            if(get_bit(sel, i)) {
+        for(let i = 0; i < sel.length; i++) {
+            if(sel.get(i)) {
                 if (ans[i] === undefined) ans[i] = [];
                 ans[i].push(name);
             }
@@ -224,7 +286,7 @@ function get_selection_graph(selections, names=null) {
 }
 
 function get_selection_matrix(selection_graph, dimensions) {
-    const cols = dimensions;
+    const cols = dimensions.x;
     const rows = dimensions.y;
     let ans = new Array(cols).fill(null).map(() => new Array(rows).fill(null));
     for(let c = 0; c < cols; c++){
@@ -245,17 +307,40 @@ function get_selection_amounts(selection_matrix) {
     return selection_matrix.map(x => x.map(x => x.length));
 }
 
+function add_user_selections(userSelections, otherSelections) {
+    let ans = otherSelections.map(x=>x.map(x=>x.slice()));
+    const cols = userSelections.columns;
+    for(let col in cols) {
+        let row = 0;
+        for(let bit of cols[col].iterBits()) {
+            if(bit) {
+                ans[col][row].unshift("you");
+            }
+            row++;
+        }
+    }
+    return ans;
+}
+
 function ScheduleRoot() {
     const [mat, setMat] = React.useState(null);
     const [escaped, setEscaped] = React.useState(false);
     const [start, setStart] = React.useState(null);
     const [end, setEnd] = React.useState(null);
-    // const [otherSelections, setOtherSelections] = React.useState([]);
+    const [[responses, otherSelections], setOtherSelections] = React.useState([1, null]);
 
     let form = React.useRef(null);
 
     React.useEffect(()=>{
         setMat(SelectionMatrix.with_size(24, 5));
+    }, []);
+    React.useEffect(()=>{
+        get_selections().then((selections)=>{
+                const selection_graph = get_selection_graph(selections);
+                const selection_matrix = get_selection_matrix(selection_graph, new Point(5, 24));
+                setOtherSelections([selections, selection_matrix]);
+            }
+        );
     }, []);
     const getSpans = () => {
         let row_span = new Span(...minmax(start.y, end.y));
@@ -301,8 +386,10 @@ function ScheduleRoot() {
         const [row_span, col_span] = getSpans();
         selection.set_selection(row_span, col_span, true);
     }
+    const user_selected = selection.any_selected() ? 1 : 0;
+    const selection_matrix = otherSelections ? add_user_selections(selection, otherSelections) : null;
     const schedule = <ShowSchedule selectionMatrix={selection} dimensions={{x:5, y:24}} cellCallback={cellCallback}/>;
-    const view = <ShowView selectionMatrix={selection} dimensions={{x:5, y:24}}/>;
+    const view = <ShowView selectionMatrix={selection_matrix} all={responses.length+user_selected}/>;
     return (
         <div>
             <div className="hz schedule-card">
