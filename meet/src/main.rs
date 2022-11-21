@@ -70,10 +70,12 @@ impl Selection {
 fn get_data(root: &Path, path: &str) -> Result<Html<String>, Rejection> {
     let full_path = root.join(path);
     println!("Get {}", full_path.to_str().unwrap());
-    if let Ok(data) = fs::read_to_string(full_path) {
-        Ok(warp::reply::html(data))
-    } else {
-        Err(warp::reject::not_found())
+    match fs::read_to_string(full_path) {
+        Ok(data) => Ok(warp::reply::html(data)),
+        x => {
+            println!("{:?}", x);
+            Err(warp::reject::not_found())
+        }
     }
 }
 
@@ -208,13 +210,13 @@ fn insert_selection(selection: Selection) -> Result<i64, Rejection> {
     }
 }
 
-fn get_selections(schid: i64) -> Result<HashMap<String, String>, Rejection> {
+fn get_selections(schid: i64) -> Result<Vec<(String, String)>, Rejection> {
     let db = Connection::open("data.db").expect("Failed to open database");
     let mut select = db
         .prepare("SELECT name, mask FROM selections WHERE schid = ?")
         .unwrap();
-    let mut map = HashMap::<String, String>::new();
-    let rows = select.query_map([schid], |row| Ok((row.get::<usize, String>(0)?, row.get::<usize, Vec<u8>>(1)?)));
+    let mut selections = Vec::<(String, String)>::new();
+    let rows = select.query_map([schid], |row| Ok((row.get::<usize, String>(0)?, encode(row.get::<usize, Vec<u8>>(1)?))));
     let rows = match rows {
         Ok(x) => x,
         Err(x) => {
@@ -224,14 +226,14 @@ fn get_selections(schid: i64) -> Result<HashMap<String, String>, Rejection> {
     };
     for selection in rows {
         match selection {
-            Ok(x) => map.insert(x.0, encode(x.1)),
+            Ok(x) => selections.push(x),
             Err(x) => {
                 println!("{:?}", x);
                 return Err(warp::reject());
             }
         };        
     }
-    Ok(map)
+    Ok(selections)
 }
 
 fn empty_ok() -> Result<&'static str, Rejection> {
@@ -305,6 +307,7 @@ async fn main() {
 
     let landing = warp::path::end().and_then(|| async { get_data(root, "new_meet.html") });
     let select_js = warp::path("select.js").and_then(|| async { get_data(root, "select.js") });
+    let bitmask_js = warp::path("bitvec.js").and_then(|| async { get_data(root, "bitvec.js") });
     let find = warp::path!(String).and_then(move |link: String| async move {
         let buf = decode(&link)?;
         let schid = get_schid(&buf)?;
@@ -321,7 +324,7 @@ async fn main() {
             let reply = warp::reply::json(&selections);
             Ok(reply) as Result<_, Rejection>
         });
-    let files = warp::get().and(landing.or(select_js).or(find).or(query_selections));
+    let files = warp::get().and(landing.or(select_js).or(bitmask_js).or(find).or(query_selections));
 
     let create = warp::path("new").and_then(|| async {
         let sched = new_schedule(insert_schid)?;
