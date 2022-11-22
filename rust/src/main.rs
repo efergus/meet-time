@@ -241,10 +241,6 @@ fn empty_ok() -> Result<&'static str, Rejection> {
     Ok("")
 }
 
-fn empty_reject() -> Result<&'static str, Rejection> {
-    Ok("")
-}
-
 // fn insert_schid()
 
 #[tokio::main]
@@ -272,46 +268,10 @@ async fn main() {
         (),
     )
     .expect("Failed to create 'selections' table");
-    // TODO obviously pass shouldn't be plain text
-    // db.execute("CREATE TABLE IF NOT EXISTS users (
-    //     userid INTEGER NOT NULL PRIMARY KEY,
-    //     alias TEXT UNIQUE,
-    //     pass TEXT,
-    // )", ()).expect("Failed to create 'users' table");
-    // db.execute("CREATE TABLE IF NOT EXISTS logins (
-    //     userid INTEGER NOT NULL,
-    //     time INTEGER NOT NULL,
-    //     token BLOB,
-    //     FOREIGN KEY(userid) REFERENCES users(userid)
-    // )", ()).expect("Failed to create 'logins' table");
-
-    // let mut insert = db
-    //     .prepare("INSERT OR REPLACE INTO selections (userid, schid, mask, name) VALUES (?, ?, ?)")
-    //     .unwrap();
-    // insert
-    //     .execute(params![0, 2, &[0u8; 0]])
-    //     .expect("Failed insertion");
-
-    // let mut retrieve = db
-    //     .prepare("SELECT userid, schid, mask, name FROM selections")
-    //     .unwrap();
-    // let selection_iter = retrieve
-    //     .query_map([], |row| {
-    //         let blob: Vec<u8> = row.get(2)?;
-    //         Ok(Selection::from_bytes(
-    //             row.get(0)?,
-    //             row.get(1)?,
-    //             &blob,
-    //             row.get(3)?,
-    //         ))
-    //     })
-    //     .unwrap();
-    // for selection in selection_iter {
-    //     println!("{:?}", selection);
-    // }
 
     let landing = warp::path::end().and_then(|| async { get_data(root, "new_meet.html") });
-    let regular_files = warp::fs::dir(root);
+    let regular_files = warp::fs::dir(root)
+        .map(|file: warp::fs::File| {println!("AAA {:?}", file.path()); file});
     let find = warp::path!(String).and_then(move |link: String| async move {
         let buf = decode(&link)?;
         let schid = get_schid(&buf)?;

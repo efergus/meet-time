@@ -1,1 +1,1 @@
-js/lib/select.js
+../js/lib/select.js

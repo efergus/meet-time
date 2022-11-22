@@ -1,1 +1,1 @@
-js/lib/bitvec.js
+../js/lib/bitvec.js
