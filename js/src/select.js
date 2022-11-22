@@ -177,13 +177,18 @@ function Box({className, margins, children}) {
     return <div className="shield"><div style={style} className="pink round">{children}</div></div>
 }
 
+function ShowLines({rows, spread}) {
+    const lines = new Array(Math.floor(rows/spread)-1).fill(null).map((x, i)=><div key={i} className="hline absolute" style={{top:(100/rows*spread*(i+1))+"%"}}/>);
+    return <div className="shadow ">{lines}</div>;
+}
+
 function ShowDates({dates}) {
     const arr = dates.map((x, i)=><div key={i} className="flex">{"11/"+(i+1)}</div>);
     return <div className="hz flex">{arr}</div>
 }
 
 function ShowTimes({rows}) {
-    const times = new Array(rows>>2).fill(null).map((x,i)=><div key={i} className="flex">{(i+8%12)+":00"}</div>);
+    const times = new Array(rows>>2).fill(null).map((x,i)=><div key={i} className="flex time">{((i+8)%12+1)+":00"}</div>);
     return <div className="vt">{times}</div>
 }
 
@@ -212,10 +217,7 @@ function ShowSelectionCol({selectionCol, callback}) {
     const spans = selectionCol.spans();
     const selections = spans.map((x, i)=><ShowSelection key={i} top={x.start/rows*height} bottom={height-x.end/rows*height}/>);
     const touchpad = <TouchpadCol rows={rows} callback={callback}/>;
-    const spread = 4;
-    const lines = new Array(Math.floor(rows/spread)-1).fill(null).map((x, i)=><div key={i} className="hline absolute" style={{top:height/rows*spread*(i+1)}}/>);
-    const linesElem = <div className="shadow">{lines}</div>;
-    return <div ref={ref} className="day">{selections}{linesElem}{touchpad}</div>
+    return <div ref={ref} className="day">{selections}<ShowLines spread={4} rows={rows}/>{touchpad}</div>
 }
 
 function ShowSchedule({selectionMatrix, dimensions, cellCallback}) {
@@ -228,16 +230,18 @@ function ShowSchedule({selectionMatrix, dimensions, cellCallback}) {
 }
 
 function ShowViewSelection({top, bottom, amt, all, max, callback}) {
-    const maxall = amt === all ? " viewall" : amt === max ? " viewmax" : "";
-    const color = maxall ? undefined : rgba(0, amt/max*255, 0, amt/max*255);
+    const maxall = amt === all ? "viewall" : amt === max ? "viewmax" : "";
+    const className = ["selection round", maxall].join(" ");
+    const ratio = (1-amt/max)*200;
+    const color = maxall ? undefined : rgba(ratio, 200, ratio, amt?1:0);
     const style = {
         top, bottom,
         backgroundColor: color,
     };
-    return <div className={"selection round"+maxall} style={style} onMouseEnter={callback}>{amt == all ? "Everyone!" : ""}</div>
+    return <div className={className} style={style} onMouseEnter={callback}><p>{amt == all ? `${amt}/${all}` : ""}</p></div>
 }
 
-function ShowViewCol({selections, all, max}) {
+function ShowViewCol({selections, all, max, callback}) {
     const rows = selections.length;
     const amts = selections.map(x=>x.length).sort().reduce((acc, x)=>acc[acc.length-1] === x ? acc : acc.concat([x]), [0]);
     let selectionViews = [];
@@ -251,16 +255,23 @@ function ShowViewCol({selections, all, max}) {
             selectionViews.push(<ShowViewSelection key={selectionViews.length} top={top+p} bottom={bottom+p} amt={amt} all={all} max={max}/>)
         }
     }
-    return <div className="day">{selectionViews}</div>
+    const touchpad = <TouchpadCol rows={rows} callback={callback}/>;
+    return <div className="day">{selectionViews}<ShowLines spread={4} rows={rows}/>{touchpad}</div>
 }
 
-function ShowView({selectionMatrix, all}) {
+function ShowView({selectionMatrix, all, callback}) {
     if(!selectionMatrix) return null;
     const max = selectionMatrix.reduce((acc, x)=>Math.max(acc, x.reduce((acc, x)=>Math.max(acc, x.length), 0)), 0)
-    const arr = selectionMatrix.map((x, i) => <ShowViewCol key={i} selections={x} all={all} max={max}/>);
+    const viewCols = selectionMatrix.map((x, i) => <ShowViewCol key={i*2} selections={x} all={all} max={max} callback={(row)=>{callback(new Point(i, row))}}/>);
+    const arr = intersperse_fn(viewCols, (i)=><div key={i*2+1} className="vline"/>);
     const dates = new Array(selectionMatrix.length).fill(null).map((x,i)=>x);
+    return <div className="schedule"><div/><ShowDates dates={dates}/><ShowTimes rows={selectionMatrix[0].length}/><div className="hz" onMouseLeave={()=>callback(null)}>{arr}</div></div>
+}
 
-    return <div className="schedule"><div/><ShowDates dates={dates}/><ShowTimes rows={selectionMatrix[0].length}/><div className="hz">{arr}</div></div>
+function ShowActiveUsers({users, hovered_idx}) {
+    const amt = hovered_idx>=0?<span>{users.reduce((acc, activity)=>acc+activity[1], 0)}/{users.length} Available: </span>:<span>Responded: </span>;
+    const arr = intersperse(users.map(([name, active], i)=><span key={i} className={active?"active":"inactive"}>{name}</span>), ", ");
+    return <div>{amt} {arr}</div>
 }
 
 async function get_selections() {
@@ -322,22 +333,32 @@ function add_user_selections(userSelections, otherSelections) {
     return ans;
 }
 
+function get_hovered_names(selections, idx, mat) {
+    const youBits = mat.toBits();
+    const you = ["you", idx>=0 ? youBits.get(idx) : youBits.any()];
+    return [you].concat(selections.map(([name, sel])=>[name, idx>=0 ? sel.get(idx) : true]));
+}
+
 function ScheduleRoot() {
     const [mat, setMat] = React.useState(null);
     const [escaped, setEscaped] = React.useState(false);
     const [start, setStart] = React.useState(null);
     const [end, setEnd] = React.useState(null);
-    const [[responses, otherSelections], setOtherSelections] = React.useState([1, null]);
+    const [[responses, otherSelections], setOtherSelections] = React.useState([[], null]);
+    const [[hovered_idx, hovered_names], setHovered] = React.useState([-1, []])
+
+    const rows = 24;
+    const cols = 5;
 
     let form = React.useRef(null);
 
     React.useEffect(()=>{
-        setMat(SelectionMatrix.with_size(24, 5));
+        setMat(SelectionMatrix.with_size(rows, cols));
     }, []);
     React.useEffect(()=>{
         get_selections().then((selections)=>{
                 const selection_graph = get_selection_graph(selections);
-                const selection_matrix = get_selection_matrix(selection_graph, new Point(5, 24));
+                const selection_matrix = get_selection_matrix(selection_graph, new Point(cols, rows));
                 setOtherSelections([selections, selection_matrix]);
             }
         );
@@ -372,6 +393,14 @@ function ScheduleRoot() {
         setEnd(pos);
     }
 
+    const viewCallback = (pos) => {
+        const hovered = pos?pos.x*rows+pos.y:-1;
+        const hovered_names = get_hovered_names(responses, hovered, mat);
+        setHovered([hovered, hovered_names]);
+    }
+
+    React.useEffect(()=>{mat && viewCallback(null)}, [responses, mat])
+
     const submit = () => {
         let mask = mat.toBits();
         form.current.value = mask.encode();
@@ -388,19 +417,25 @@ function ScheduleRoot() {
     }
     const user_selected = selection.any_selected() ? 1 : 0;
     const selection_matrix = otherSelections ? add_user_selections(selection, otherSelections) : null;
-    const schedule = <ShowSchedule selectionMatrix={selection} dimensions={{x:5, y:24}} cellCallback={cellCallback}/>;
-    const view = <ShowView selectionMatrix={selection_matrix} all={responses.length+user_selected}/>;
+    const schedule = <ShowSchedule selectionMatrix={selection} dimensions={{x:cols, y:rows}} cellCallback={cellCallback}/>;
+    const view = <ShowView selectionMatrix={selection_matrix} all={responses.length+user_selected} callback={viewCallback}/>;
+    const users = <ShowActiveUsers users={hovered_names} hovered_idx={hovered_idx}/>
     return (
-        <div>
-            <div className="hz schedule-card">
-                <div className="schedule-block">{schedule}</div>
-                <div className="schedule-block">{view}</div>
+        <div className="hz center flex">
+            <div className="schedule-card flex">
+                <div className="flex hz apart noselect">
+                    <div className="schedule-block">{schedule}</div>
+                    <div className="schedule-block">{view}</div>
+                </div>
+                <div className="form-block">
+                    {users}
+                    <form action={window.location.pathname+"/submit"} method="post" onSubmit={submit}>
+                        <input type="text" name="name" placeholder="Anonymous"/>
+                        <input ref={form} type="hidden" name="submit" value=""/>
+                        <input type="submit" value="Submit"/>
+                    </form>
+                </div>
             </div>
-            <form action={window.location.pathname+"/submit"} method="post" onSubmit={submit}>
-                <input type="text" name="name" placeholder="Anonymous"/>
-                <input ref={form} type="hidden" name="submit" value=""/>
-                <input type="submit" value="Submit"/>
-            </form>
         </div>
     );
 }
