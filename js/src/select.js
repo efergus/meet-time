@@ -183,7 +183,9 @@ function ShowLines({rows, spread}) {
 }
 
 function ShowDates({dates}) {
-    const arr = dates.map((x, i)=><div key={i} className="flex">{"11/"+(i+1)}</div>);
+    const dates_arr = dates.map(x=>new Date(x*1000))
+        .map(x=>x.toLocaleDateString(undefined, {weekday: "short", month: "numeric", day: "numeric"}));
+    const arr = dates_arr.map((x, i)=><div key={i} className="flex">{x}</div>);
     return <div className="hz flex">{arr}</div>
 }
 
@@ -220,10 +222,9 @@ function ShowSelectionCol({selectionCol, callback}) {
     return <div ref={ref} className="day">{selections}<ShowLines spread={4} rows={rows}/>{touchpad}</div>
 }
 
-function ShowSchedule({selectionMatrix, dimensions, cellCallback}) {
+function ShowSchedule({selectionMatrix, dimensions, dates, cellCallback}) {
     const selectionCols = selectionMatrix.map((x, i)=><ShowSelectionCol key={i*2} selectionCol={x} callback={(row, buttons)=>cellCallback(new Point(i, row), buttons)}/>);
     const arr = intersperse_fn(selectionCols, (i)=><div key={i*2+1} className="vline"/>);
-    const dates = new Array(dimensions.x).fill(null).map((x,i)=>x);
     return (
         <div className="schedule"><div/><div><ShowDates dates={dates}/></div><ShowTimes rows={dimensions.y}/><div className="hz border">{arr}</div></div>
     )
@@ -259,12 +260,11 @@ function ShowViewCol({selections, all, max, callback}) {
     return <div className="day">{selectionViews}<ShowLines spread={4} rows={rows}/>{touchpad}</div>
 }
 
-function ShowView({selectionMatrix, all, callback}) {
+function ShowView({selectionMatrix, all, dates, callback}) {
     if(!selectionMatrix) return null;
     const max = selectionMatrix.reduce((acc, x)=>Math.max(acc, x.reduce((acc, x)=>Math.max(acc, x.length), 0)), 0)
     const viewCols = selectionMatrix.map((x, i) => <ShowViewCol key={i*2} selections={x} all={all} max={max} callback={(row)=>{callback(new Point(i, row))}}/>);
     const arr = intersperse_fn(viewCols, (i)=><div key={i*2+1} className="vline"/>);
-    const dates = new Array(selectionMatrix.length).fill(null).map((x,i)=>x);
     return <div className="schedule"><div/><ShowDates dates={dates}/><ShowTimes rows={selectionMatrix[0].length}/><div className="hz border" onMouseLeave={()=>callback(null)}>{arr}</div></div>
 }
 
@@ -426,8 +426,8 @@ function ScheduleRoot({duration, times}) {
     }
     const user_selected = selection.any_selected() ? 1 : 0;
     const selection_matrix = otherSelections ? add_user_selections(selection, otherSelections) : null;
-    const schedule = <ShowSchedule selectionMatrix={selection} dimensions={{x:cols, y:rows}} cellCallback={cellCallback}/>;
-    const view = <ShowView selectionMatrix={selection_matrix} all={responses.length+user_selected} callback={viewCallback}/>;
+    const schedule = <ShowSchedule selectionMatrix={selection} dimensions={{x:cols, y:rows}} dates={times} cellCallback={cellCallback}/>;
+    const view = <ShowView selectionMatrix={selection_matrix} all={responses.length+user_selected} dates={times} callback={viewCallback}/>;
     const users = <ShowActiveUsers users={hovered_names} hovered_idx={hovered_idx}/>
     return (
         <div className="hz center flex">

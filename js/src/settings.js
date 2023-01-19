@@ -108,6 +108,7 @@ function Calendar({year, month, onMouse, isSelected}) {
 
 function Form({times, duration}) {
     const value =[duration].concat(times).map(x=>x.toString(16)).join(",");
+    console.log(times, value);
 
     return (
         <form action="create" method="post">
@@ -168,7 +169,7 @@ function SettingsRoot() {
                 <NextDays {...dateInfo} count={5} {...callbacks}/>
                 <Calendar {...dateInfo} {...callbacks}/>
             </div>
-            <Form times={Object.keys(selections)} duration={60*60*8}/>
+            <Form times={Object.keys(selections).map(x=>Math.floor(x/1000))} duration={60*60*8}/>
         </div>
     );
 }
