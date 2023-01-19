@@ -225,7 +225,7 @@ function ShowSchedule({selectionMatrix, dimensions, cellCallback}) {
     const arr = intersperse_fn(selectionCols, (i)=><div key={i*2+1} className="vline"/>);
     const dates = new Array(dimensions.x).fill(null).map((x,i)=>x);
     return (
-        <div className="schedule"><div/><div><ShowDates dates={dates}/></div><ShowTimes rows={dimensions.y}/><div className="hz">{arr}</div></div>
+        <div className="schedule"><div/><div><ShowDates dates={dates}/></div><ShowTimes rows={dimensions.y}/><div className="hz border">{arr}</div></div>
     )
 }
 
@@ -238,7 +238,7 @@ function ShowViewSelection({top, bottom, amt, all, max, callback}) {
         top, bottom,
         backgroundColor: color,
     };
-    return <div className={className} style={style} onMouseEnter={callback}><p>{amt == all ? `${amt}/${all}` : ""}</p></div>
+    return <div className={className} style={style} onMouseEnter={callback}><p>{amt == max ? `${amt}/${all}` : ""}</p></div>
 }
 
 function ShowViewCol({selections, all, max, callback}) {
@@ -265,21 +265,27 @@ function ShowView({selectionMatrix, all, callback}) {
     const viewCols = selectionMatrix.map((x, i) => <ShowViewCol key={i*2} selections={x} all={all} max={max} callback={(row)=>{callback(new Point(i, row))}}/>);
     const arr = intersperse_fn(viewCols, (i)=><div key={i*2+1} className="vline"/>);
     const dates = new Array(selectionMatrix.length).fill(null).map((x,i)=>x);
-    return <div className="schedule"><div/><ShowDates dates={dates}/><ShowTimes rows={selectionMatrix[0].length}/><div className="hz" onMouseLeave={()=>callback(null)}>{arr}</div></div>
+    return <div className="schedule"><div/><ShowDates dates={dates}/><ShowTimes rows={selectionMatrix[0].length}/><div className="hz border" onMouseLeave={()=>callback(null)}>{arr}</div></div>
 }
 
 function ShowActiveUsers({users, hovered_idx}) {
     const amt = hovered_idx>=0?<span>{users.reduce((acc, activity)=>acc+activity[1], 0)}/{users.length} Available: </span>:<span>Responded: </span>;
-    const arr = intersperse(users.map(([name, active], i)=><span key={i} className={active?"active":"inactive"}>{name}</span>), ", ");
+    const arr = intersperse(users.map(([name, active], i)=><span key={i} className={active?"active":"inactive"}>{name || "Anonymous"}</span>), ", ");
     return <div>{amt} {arr}</div>
 }
 
 async function get_selections() {
-    let response = await fetch(window.location.pathname+"/q");
+    let response = await fetch(window.location.pathname+"/s");
     let data = await response.json();
     for (let key in data) {
         data[key][1] = new BitVec(decode_buffer(data[key][1]));
     }
+    return data;
+}
+
+async function get_times() {
+    let response = await fetch(window.location.pathname+"/t");
+    let data = await response.json();
     return data;
 }
 
@@ -339,30 +345,41 @@ function get_hovered_names(selections, idx, mat) {
     return [you].concat(selections.map(([name, sel])=>[name, idx>=0 ? sel.get(idx) : true]));
 }
 
-function ScheduleRoot() {
+function ScheduleRoot({duration, times}) {
     const [mat, setMat] = React.useState(null);
     const [escaped, setEscaped] = React.useState(false);
     const [start, setStart] = React.useState(null);
     const [end, setEnd] = React.useState(null);
     const [[responses, otherSelections], setOtherSelections] = React.useState([[], null]);
+    // const [[duration, times], setTimes] = React.useState([0, []]);
     const [[hovered_idx, hovered_names], setHovered] = React.useState([-1, []])
 
-    const rows = 24;
-    const cols = 5;
-
+    const rows = Math.ceil(duration/60/15);
+    const cols = times.length;
     let form = React.useRef(null);
 
     React.useEffect(()=>{
         setMat(SelectionMatrix.with_size(rows, cols));
-    }, []);
-    React.useEffect(()=>{
         get_selections().then((selections)=>{
                 const selection_graph = get_selection_graph(selections);
                 const selection_matrix = get_selection_matrix(selection_graph, new Point(cols, rows));
                 setOtherSelections([selections, selection_matrix]);
             }
         );
-    }, []);
+    }, [rows, cols]);
+
+    const viewCallback = (pos) => {
+        const hovered = pos?pos.x*rows+pos.y:-1;
+        const hovered_names = get_hovered_names(responses, hovered, mat);
+        setHovered([hovered, hovered_names]);
+    }
+
+    React.useEffect(()=>{mat && viewCallback(null)}, [responses, mat])
+
+    if(!cols || !rows) {
+        return <div>Nothing to see here</div>
+    }
+
     const getSpans = () => {
         let row_span = new Span(...minmax(start.y, end.y));
         row_span.end += 1;
@@ -393,14 +410,6 @@ function ScheduleRoot() {
         setEnd(pos);
     }
 
-    const viewCallback = (pos) => {
-        const hovered = pos?pos.x*rows+pos.y:-1;
-        const hovered_names = get_hovered_names(responses, hovered, mat);
-        setHovered([hovered, hovered_names]);
-    }
-
-    React.useEffect(()=>{mat && viewCallback(null)}, [responses, mat])
-
     const submit = () => {
         let mask = mat.toBits();
         form.current.value = mask.encode();
@@ -423,6 +432,10 @@ function ScheduleRoot() {
     return (
         <div className="hz center flex">
             <div className="schedule-card flex">
+                <div className="header-block">
+                    <h1>Title</h1>
+                    <p>Click and drag to select, hover to see availability</p>
+                </div>
                 <div className="flex hz apart noselect">
                     <div className="schedule-block">{schedule}</div>
                     <div className="schedule-block">{view}</div>
@@ -442,4 +455,4 @@ function ScheduleRoot() {
 
 const domContainer = document.getElementById('root');
 const root = ReactDOM.createRoot(domContainer);
-root.render(React.createElement(ScheduleRoot));
+const times = get_times().then(times=>root.render(<ScheduleRoot {...times}/>));

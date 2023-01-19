@@ -16,11 +16,11 @@
     z-index: 1;
     pointer-events: none;
 }
-.viewall > p {
-    margin: 0.2em;
-}
 .viewmax {
     background-color: rgb(0, 204, 255);
+}
+.viewall > p, .viewmax > p {
+    margin: 0.2em;
 }
 .full {
     width: 100%;
@@ -40,8 +40,8 @@
 .vline {
     height: 100%;
     border-left: solid;
-    border-radius: 0.1em;
-    border-width: 0.2em;
+    border-radius: 0.05em;
+    border-width: 0.1em;
     border-color: #201e1e;
 }
 .hline {
@@ -50,6 +50,20 @@
     border-radius: 0.05em;
     border-width: 0.1em;
     border-color: #201e1e;
+}
+.form-new {
+    padding: 1em;
+}
+input[type="submit"] {
+    background:rgb(0, 204, 255);
+    outline: none;
+    border-radius: 0.5em;
+    border-style: solid;
+    border-color: #e6e6e6;
+}
+input[type="submit"]:hover {
+    background:rgb(36, 211, 255);
+    border-color: #b4b4b4;
 }
 .shield {
     width: 100%;
@@ -67,6 +81,10 @@
 }
 .pink {
     background-color: rgba(252, 46, 183, 0.678);
+}
+.border {
+    border-style: solid;
+    border-width: 0.1em;
 }
 .round {
     border-radius: 0.4em;
@@ -87,6 +105,7 @@
     max-width: 90em;
     display: flex;
     flex-direction: column;
+    justify-content: flex-start;
 }
 .schedule {
     flex: 1;
@@ -102,17 +121,69 @@
     margin: 1em;
     max-width: 40em;
     min-width: 20em;
+    max-height: 60em;
     display: flex;
     align-items: stretch;
 }
+.calendar {
+    display: flex;
+    flex-direction: column;
+}
+.calendar-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    grid-auto-rows: 1fr;
+    background-color: rgb(215, 208, 255);
+    box-sizing: border-box;
+    aspect-ratio: 4/3;
+    max-width: 30em;
+}
+.calendar-day {
+    margin: 0.1em;
+    padding: 0.2em;
+    background-color: #b4b4b4;
+    box-sizing: border-box;
+    border-radius: 0.2em;
+    min-width: 2em;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.calendar-day:hover {
+    background-color: blanchedalmond;
+}
+.calendar .label {
+    display: flex;
+    align-items: flex-end;
+    padding: 0.2em;
+}
+.selected {
+    background-color: aqua;
+}
 .form-block {
+    flex: 0.1;
     margin-left: 1em;
+}
+.header-block {
+    flex: 0.1;
+    margin-left: 1em;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+.new-button {
+    padding: 0.3em 0.5em;
+    font-size: 4em;
 }
 .center {
     justify-content: center;
 }
 .apart {
     justify-content: space-between;
+}
+.even {
+    justify-content: space-evenly;
 }
 .hz {
     display: flex;

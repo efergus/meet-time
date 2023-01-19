@@ -1,0 +1,1 @@
+../js/lib/settings.js
