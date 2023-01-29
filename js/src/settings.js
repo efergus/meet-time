@@ -61,9 +61,17 @@ function Day({date, selected, onMouse}) {
     )
 }
 
+function Time({time, selected, onMouse}) {
+    const classes = (selected ? ["selected"] : []).concat(["calendar-day"])
+    return (
+        <div className={classes.join(" ")} {...mouseCallbacks(x=>onMouse(x.buttons, x))}>
+            {(time+11)%12 + 1 + ":00"}
+        </div>
+    )
+}
+
 function NextDays({year, month, date, count, isSelected, onMouse}) {
-    const start = dayOfWeek(year, month, date);
-    const labels = new Array(count).fill(null).map((_, i)=><DayOfWeek key={i} number={(i+start)%(count-1)}/>);
+    const labels = new Array(count).fill(null).map((_, i)=><DayOfWeek key={i} number={dayOfWeek(year, month, i+date)}/>);
     let days = new Array(count).fill(null).map((_, i)=>{
         const time = new Date(year, month, date+i);
         return <Day key={i} date={time.getDate()} selected={isSelected(time)} onMouse={e=>onMouse([time.getTime(), time], e)}/>
@@ -106,10 +114,26 @@ function Calendar({year, month, onMouse, isSelected}) {
     )
 }
 
+
+function TimeSelect({count, isSelected, onMouse}) {
+    let times = new Array(count).fill(null).map((_, i)=>{
+        return <Time key={i} time={i} selected={isSelected(i)} onMouse={e=>onMouse(i, e)}/>
+    });
+    const style = {
+        gridTemplateRows: `repeat(${count}, 1fr)`,
+        gridTemplateColumns: "min-content 1fr",
+    }
+    return (
+        <div className="calendar">
+            <div className="hour-grid noselect" style={style}>
+                {times}
+            </div>
+        </div>
+    )
+}
+
 function Form({times, duration}) {
     const value =[duration].concat(times).map(x=>x.toString(16)).join(",");
-    console.log(times, value);
-
     return (
         <form action="create" method="post">
             <input type="hidden" name="selections" value={value}/>
@@ -122,6 +146,7 @@ function Form({times, duration}) {
 function SettingsRoot() {
     const [mouseState, setMouseState] = React.useState({down: false, selecting: false});
     const [selections, setSelections] = React.useState({});
+    const [timeRange, setTimeRange] = React.useState([8, 16]);
     const isSelected = selection=>{
         return selection[0] in selections;
     }
@@ -153,6 +178,16 @@ function SettingsRoot() {
         }
         setMouseState({down, selecting});
     }
+    const handleMouseTime = (selection, buttons)=>{
+        if(buttons) {
+            if(selection <= timeRange[0] + 1){
+                setTimeRange([selection, selection+timeRange[1]-timeRange[0]]);
+            }
+            else{
+                setTimeRange([timeRange[0], selection]);
+            }
+        }
+    }
     const date = new Date();
     const dateInfo = {
         year: date.getFullYear(),
@@ -163,13 +198,19 @@ function SettingsRoot() {
         onMouse: (selection, buttons)=>handleMouse(selection, buttons),
         isSelected: date=>isSelected([date.getTime(), date]),
     }
+    const timeCallbacks = {
+        onMouse: handleMouseTime,
+        isSelected: time=>time>=timeRange[0] && time<=timeRange[1],
+    }
+    const startTimes = Object.keys(selections).map(x=>{let d = new Date(parseInt(x)); d.setHours(timeRange[0]); return Math.floor(d.getTime()/1000)});
     return (
         <div>
             <div className="flex hz center">
                 <NextDays {...dateInfo} count={5} {...callbacks}/>
                 <Calendar {...dateInfo} {...callbacks}/>
+                <TimeSelect {...dateInfo} count={24} {...timeCallbacks}/>
             </div>
-            <Form times={Object.keys(selections).map(x=>Math.floor(x/1000))} duration={60*60*8}/>
+            <Form times={startTimes} duration={(timeRange[1]-timeRange[0])*3600}/>
         </div>
     );
 }
