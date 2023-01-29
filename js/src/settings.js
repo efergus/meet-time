@@ -181,7 +181,7 @@ function SettingsRoot() {
     const handleMouseTime = (selection, buttons)=>{
         if(buttons) {
             if(selection <= timeRange[0] + 1){
-                setTimeRange([selection, selection+timeRange[1]-timeRange[0]]);
+                setTimeRange([selection, Math.min(selection+timeRange[1]-timeRange[0], 23)]);
             }
             else{
                 setTimeRange([timeRange[0], selection]);

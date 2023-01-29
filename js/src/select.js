@@ -191,7 +191,6 @@ function ShowDates({dates}) {
 
 function ShowTimes({rows, start, step}) {
     if(!step) step=3600;
-    console.log(rows, start, step);
     const times_arr = new Array(rows>>2).fill(null)
         // \xa0 is a non-breaking space
         .map((_, i)=>new Date((start+step*i)*1000).toLocaleTimeString(undefined, {hour: "numeric", minute: "numeric"}).replace(' ', '\xa0'))
@@ -360,7 +359,6 @@ function ScheduleRoot({duration, times}) {
     const [[hovered_idx, hovered_names], setHovered] = React.useState([-1, []])
 
     const rows = Math.ceil(duration/60/15);
-    console.log(duration, rows);
     const cols = times.length;
     let form = React.useRef(null);
 
