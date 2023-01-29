@@ -189,9 +189,13 @@ function ShowDates({dates}) {
     return <div className="hz flex">{arr}</div>
 }
 
-function ShowTimes({rows}) {
-    const times = new Array(rows>>2).fill(null).map((x,i)=><div key={i} className="flex time">{((i+8)%12+1)+":00"}</div>);
-    return <div className="vt">{times}</div>
+function ShowTimes({rows, start, step}) {
+    if(!step) step=3600;
+    console.log(rows, start, step);
+    const times_arr = new Array(rows>>2).fill(null)
+        .map((_, i)=>new Date((start+step*i)*1000).toLocaleTimeString(undefined, {hour: "numeric", minute: "numeric"}))
+        .map((x, i)=><div key={i} className="flex time">{x}</div>);
+    return <div className="vt">{times_arr}</div>
 }
 
 function Touchable({callback, className, style, children}) {
@@ -226,7 +230,7 @@ function ShowSchedule({selectionMatrix, dimensions, dates, cellCallback}) {
     const selectionCols = selectionMatrix.map((x, i)=><ShowSelectionCol key={i*2} selectionCol={x} callback={(row, buttons)=>cellCallback(new Point(i, row), buttons)}/>);
     const arr = intersperse_fn(selectionCols, (i)=><div key={i*2+1} className="vline"/>);
     return (
-        <div className="schedule"><div/><div><ShowDates dates={dates}/></div><ShowTimes rows={dimensions.y}/><div className="hz border">{arr}</div></div>
+        <div className="schedule"><div/><div><ShowDates dates={dates}/></div><ShowTimes rows={dimensions.y} start={dates[0]}/><div className="hz border">{arr}</div></div>
     )
 }
 
@@ -265,7 +269,7 @@ function ShowView({selectionMatrix, all, dates, callback}) {
     const max = selectionMatrix.reduce((acc, x)=>Math.max(acc, x.reduce((acc, x)=>Math.max(acc, x.length), 0)), 0)
     const viewCols = selectionMatrix.map((x, i) => <ShowViewCol key={i*2} selections={x} all={all} max={max} callback={(row)=>{callback(new Point(i, row))}}/>);
     const arr = intersperse_fn(viewCols, (i)=><div key={i*2+1} className="vline"/>);
-    return <div className="schedule"><div/><ShowDates dates={dates}/><ShowTimes rows={selectionMatrix[0].length}/><div className="hz border" onMouseLeave={()=>callback(null)}>{arr}</div></div>
+    return <div className="schedule"><div/><ShowDates dates={dates}/><ShowTimes rows={selectionMatrix[0].length} start={dates[0]}/><div className="hz border" onMouseLeave={()=>callback(null)}>{arr}</div></div>
 }
 
 function ShowActiveUsers({users, hovered_idx}) {
